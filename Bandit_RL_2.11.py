@@ -9,7 +9,7 @@ from k_armed_bandits import k_armed
 import numpy as np
 import matplotlib.pyplot as plt 
 
-epochs = 10000
+epochs = 1000
 k = 10
 max_p = 1
 policy = True
