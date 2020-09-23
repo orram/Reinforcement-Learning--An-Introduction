@@ -55,7 +55,7 @@ def Race_track(size):
     count = 0
     add_to_right = False
     for i in range(size[0]):
-        if count < 10: # so the bounderies change more smoothly and less chaiotecly
+        if count < 5: # so the bounderies change more smoothly and less chaiotecly
             left_choice = left_choice
         else:
             count = 0
@@ -119,7 +119,11 @@ def Race(track, coordinates, speed, action):
     
     '''
     speed = np.array(speed)
-    action = np.array(action)
+    if np.random.choice([0,1],p = [0.9,0.1]):
+        action = np.array([0,0])
+    else:
+        action = np.array(action)
+    
     coordinates = np.array(coordinates)
     allowed_locations = np.argwhere(track>0)
     start_line_coordinates = allowed_locations[allowed_locations[:,0] == np.shape(track)[0] - 1]
@@ -225,8 +229,9 @@ off-policy MC control, for estimating pi
         W = W * 1/b(At|St)  
 
 '''
-track = Race_track([20,15])
-plt.imshow(track)
+#%%
+track = Race_track([60,40])
+#%%
 #Inirtialize parameters:
 all_locations = np.argwhere(track>0)*1
 all_actions = []
@@ -291,12 +296,13 @@ for location in all_locations:
 #%%
 policy_reward = []
 changed_act_at_loc = []
-on_policy = True
-epochs = 5_001
+on_policy = False
+epochs = 2_001
 lam = 0.5
 epsilon = 0.8 
 mark_w = 1.25
-start_point_for_test = np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)[np.random.randint(0,len(np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)))]
+all_tests = []
+
 for epoch in range(epochs):
     if epoch%1000 == 0:
         print('Starting epoch -',epoch)
@@ -312,7 +318,7 @@ for epoch in range(epochs):
     didnt_reach_finish = False
     while not finish:
         run_time += 1
-        if run_time % 50_0000 == 0:
+        if run_time % 50_000 == 0:
             print(run_time)
             didnt_reach_finish = True
             break
@@ -365,10 +371,10 @@ for epoch in range(epochs):
         else:
             W = W * (1/b[str(coor)][str(speed)][str(action)])
             
-    if epoch%1_000== 0: 
+    if epoch%10== 0: 
         if epoch == 0:
             pass
-        start_location = start_point_for_test
+        start_location = np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)[np.random.randint(0,len(np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)))]
         start_location = all_locations[start_location[0]]
         print(epoch, start_location,track[start_location[0],start_location[1]])
         #start_location[0] = np.shape(track)[0]-1
@@ -401,22 +407,101 @@ for epoch in range(epochs):
         sum_reward = sum(test_memory[:,-1])
         policy_reward.append([epoch,sum_reward])
         print('sum reward of policy after epoch {0} is {1}'.format(epoch,sum_reward))
+        all_tests.append([test_memory,epoch,sum_reward])
 policy_reward = np.array(policy_reward)
 plt.figure()
+track_visits[track_visits> np.mean(track_visits) + np.std(track_visits)] = np.mean(track_visits) + np.std(track_visits)
 plt.imshow(track_visits)
+plt.title('Represnts the number of VISITS\n the simulation took in each location\n on policy = {0}'.format(on_policy))
+plt.colorbar()
 track_changed = track*1
 for i in range(len(changed_act_at_loc)):
     track_changed[changed_act_at_loc[i][0],changed_act_at_loc[i][1]] += 1
 plt.figure()
 plt.imshow(track_changed)
+plt.title('Represnts the number of CHANGES\n of the policy in each location\n on policy = {0}'.format(on_policy))
+plt.colorbar()
 plt.figure()
-plt.plot(policy_reward[:,0],np.abs(policy_reward[:,1]))
+plt.plot(policy_reward[int(len(policy_reward)*0.1):,0],np.abs(policy_reward[int(len(policy_reward)*0.1):,1]))
+plt.xlabel('epochs')
+plt.ylabel('reward')
+plt.title('The rewards the policy got on the test run\n on policy = {0}'.format(on_policy))
 avrg_reward = []
 for i in range(len(policy_reward)):
     avrg_reward.append(np.mean(np.abs(policy_reward[:,1])[:i]))
 plt.figure()
-plt.plot(policy_reward[:,0],avrg_reward)
+plt.plot(policy_reward[int(len(policy_reward)*0.1):,0],avrg_reward[int(len(policy_reward)*0.1):])
+plt.xlabel('epochs')
+plt.ylabel('avrg reward')
+plt.title('The avrg rewards the policy got on the test runs\n on policy = {0}'.format(on_policy))
+#%%
+plt.subplots_adjust(left=5, bottom=5, right=6.5, top=6.5, wspace=None, hspace=None)
+f = plt.figure(figsize=(20,20))
+for j in range(1,10):
+    i = np.linspace(1,len(all_tests), num=9)
+    i = i[j-1]
+    i = int(i)
+    ax = f.add_subplot(3,3,j)
+    ax.set_title('{0} epochs, reward = {1}'.format(all_tests[i-1][1],all_tests[i-1][2]))
+    test_track = track*1
+    temp_run = all_tests[i-1][0][:,0]
+    for j in range(len(temp_run)):
+        test_track[temp_run[j][0],temp_run[j][1]] += 4
+    plt.imshow(test_track)
 
+
+
+    
+#%%
+import matplotlib.animation as animation
+# Set up formatting for the movie files
+#Writer = animation.writers['ffmpeg']
+#writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+writergif = animation.PillowWriter(fps=50)
+
+M = track*1
+M[-1,-1] = np.max(track_changed)
+
+def update(i):
+    M[changed_act_at_loc[i][0],changed_act_at_loc[i][1]] += 1
+
+    matrice.set_array(M)
+    #if np.sum(M == track_changed):
+    #   M = track*1
+    
+
+fig, ax = plt.subplots()
+matrice = ax.matshow(M)
+plt.colorbar(matrice)
+
+ani = animation.FuncAnimation(fig, update, frames=len(changed_act_at_loc), interval=0.5, repeat =False)
+ani.save('changed_action_at_location on policy = {0}.gif'.format(on_policy), writer=writergif)
+plt.show()
+#%%
+writergif = animation.PillowWriter(fps=5)
+anim_memory = []
+for i in range(len(all_tests)):
+    temp_track = track*1
+    temp_run = all_tests[i][0][:,0]
+    for j in range(len(temp_run)):
+        temp_track[temp_run[j][0],temp_run[j][1]] += 4
+    anim_memory.append(temp_track)
+for i in range(15):
+    anim_memory.append(track*1)
+M = track*1
+
+def update(i):
+    M = anim_memory[i]
+    matrice.set_array(M)
+    
+fig, ax = plt.subplots()
+plt.title('Examples of tracks chosen\n by the policy in differnet epochs')
+matrice = ax.matshow(M)
+plt.colorbar(matrice)
+
+ani = animation.FuncAnimation(fig, update, frames=len(anim_memory), interval=200, repeat =False)
+ani.save('all_test_tracks on policy = {0}.gif'.format(on_policy), writer=writergif)
+plt.show()
 #%%
 
 
