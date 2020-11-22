@@ -95,19 +95,18 @@ for epoch in range(epochs):
     else: 
         location = new_location*1
     local_memory.append(location*1)
-    if count_steps == 0:
-        action_space = Q[:,location[0],location[1]]
-        #epsilon greedy:
-        if np.random.rand() > 1 - epsilon:
-            action = np.random.randint(0,len(action_space))
-        else:
-            action = np.where(action_space == max(action_space))[0]
-            #if more then one max action, pick at random
-            if len(action) > 1:
-                action = action[np.random.randint(0,len(action))]
-        action = int(action )
+    
+    action_space = Q[:,location[0],location[1]]
+    #epsilon greedy:
+    if np.random.rand() > 1 - epsilon:
+        action = np.random.randint(0,len(action_space))
     else:
-        action = new_action
+        action = np.where(action_space == max(action_space))[0]
+        #if more then one max action, pick at random
+        if len(action) > 1:
+            action = action[np.random.randint(0,len(action))]
+    action = int(action )
+
     action_memory.append([location,action, np.where(action_space == max(action_space))[0]])
     new_location, reward = windy_gridworld(location, action)
     if reward == -1:
