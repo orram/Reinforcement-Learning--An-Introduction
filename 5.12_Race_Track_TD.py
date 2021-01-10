@@ -8,6 +8,7 @@ Created on Tue Sep 15 13:08:55 2020
 A solution to the race track problem as defined in the book - 
 Reinforment Lerning - an introduction 
 page - 111
+Only here we use TD(n) algorithm to compare with MC that we did before
 
 
 """
@@ -206,33 +207,45 @@ def Race(track, coordinates, speed, action):
      
 '''
 NOW LETS LEARN
-Defining the Monte Carlo algorithm as:
+Defining the TD(n) algorithm on-policy as:
 
-off-policy MC control, for estimating pi
+Initialize Q(s, a) arbitrarily, for all s in S,a in A 
+Algorithm parameters: 
+    step size alpha in (0, 1] 
+    small epsilon > 0, 
+    a positive integer n 
+All store and access operations (for St, At, and Rt) can take their index mod n +1
+set pi(s,a) from Q
 
-* Initialize, for all S, A(s): 
-    Q(s, a) - (arbitrarily) 
-    C(s, a) - 0
-    pi(s) = argmaxa Q(s, a) (with ties broken consistently) 
-
-* Loop forever (for each episode): 
-    b - any soft policy 
-    Generate an episode using b: S0,A0,R1,. .., S_T-1,A_T-1,R_T 
-    W  = 1
-    G  = 0 
-    Loop for each step of episode, t = T-1,T-2,. .., 0: 
-        G  = G+Rt+1
-        C(St,At)  = C(St,At)+W
-        Q(St,At)  = Q(St,At)+ (W/C(St,At))[G - Q(St,At)]    
-        pi(St)  = argmaxa Q(St,a) (with ties broken consistently)
-        If At ~= pi(St) then exit inner Loop (proceed to next episode) 
-        W = W * 1/b(At|St)  
+Loop for each episode: 
+    Initialize and store S0 ~= terminal 
+    Select and store an action A0 from pi(·|S0) 
+    set T -> inf
+    Loop for t =0, 1, 2,. .. : 
+        If t< T,then:
+            Take action A_t
+            | | |
+            Observe and store the next reward as Rt+1 and the next state as St+1 
+            If St+1 is terminal, then:
+                T <- t +1
+            else:
+                Select and store an action A_t+1 from pi(·|St+1) 
+        tau  <- t - n +1 (tau is the time whose estimate is being updated)
+        
+        If tau >= 0:  
+            G = sum_i(sigma**(i-tau-1)*R_i) - A descounting weighted sum over the n rewards
+        If tau + n < T,then G = G+ (sigma**n)*Q(S_(tau+n),A_(tau+n))
+        #update the Q value with the new experiance G
+        Q(S_tau,A_tau) =  Q(S_tau,A_tau) + alpha * [G - Q(S_tau,A_tau)] 
+        If pi is being learned, then ensure that pi(·|S⌧)is epsilon-greedy wrt Q
+until tau = T - 1
 
 '''
 #%%
+#Initialize the race track map
 track = Race_track([60,40])
 #%%
-#Inirtialize parameters Q C and b:
+#Inirtialize parameters:
 all_locations = np.argwhere(track>0)*1
 all_actions = []
 for i in [-1,0,1]:
@@ -294,22 +307,18 @@ for location in all_locations:
         pi[str(location*1) + "," + str(np.array(speed)*1)] = all_actions[max_act]
     
 #%%
-#Start Learning
 policy_reward = []
 changed_act_at_loc = []
 on_policy = False
-epochs = 5_001
+epochs = 2_001
 lam = 0.5
-epsilon = 0.8
-update_epsilon = True
+epsilon = 0.8 
 mark_w = 1.25
 all_tests = []
-
 
 for epoch in range(epochs):
     if epoch%1000 == 0:
         print('Starting epoch -',epoch)
-    #Set the start location as a random option from the race track
     start_location = np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)[np.random.randint(0,len(np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)))]
     start_location = all_locations[start_location[0]]
     new_coordinates, new_speed, reward, finish = Race(track = track,
@@ -320,9 +329,6 @@ for epoch in range(epochs):
     race_memory = []
     run_time = 0
     didnt_reach_finish = False
-    #Simulate a run trough the track, MC learning is done at the end after an experiance 
-    #and so we need to simulate before learning. Set a limit == 50_000 
-    #for a simulation so it won't go for ever.
     while not finish:
         run_time += 1
         if run_time % 50_000 == 0:
@@ -330,31 +336,24 @@ for epoch in range(epochs):
             didnt_reach_finish = True
             break
         if on_policy:
-            #Epsilon greedy, choose from the policy and with chance epsilon
-            #choose a random action
             if np.random.choice([0,1], p = [epsilon, 1-epsilon]):
                 action = all_actions[np.random.choice(np.arange(0,9))]
             else:
                 action = pi[str(new_coordinates*1) + "," + str(new_speed*1)]
                 
         else:
-            #off-policy, choose from policy b the probabilities for actions
             p = list(b[str(new_coordinates)][str(new_speed)].values())
             action_index = np.random.choice(np.arange(0,9),p = p)
             action = all_actions[action_index]
-        #propogate the system given the chosen action from the policy
         old_coordinates = new_coordinates*1
         old_speed = new_speed * 1
         new_coordinates, new_speed, reward, finish = Race(track = track,
                                                       coordinates = new_coordinates,
                                                       speed = new_speed, 
                                                       action = action)
-        #Keep a memory of the locations visited for later analysis
         track_visits[new_coordinates[0],new_coordinates[1]] += 1
         race_memory.append([old_coordinates,old_speed, action, reward])
         
-    #Now evaluation and learning:
-        #See above equations and book for more information
     race_memory = np.array(race_memory, dtype=object)
     G = 0 
     W = 1
@@ -421,9 +420,6 @@ for epoch in range(epochs):
         sum_reward = sum(test_memory[:,-1])
         policy_reward.append([epoch,sum_reward])
         print('sum reward of policy after epoch {0} is {1}'.format(epoch,sum_reward))
-        if sum_reward < 50 and update_epsilon:
-            epsilon = 0.5 * epsilon
-            update_epsilon = False
         all_tests.append([test_memory,epoch,sum_reward])
 policy_reward = np.array(policy_reward)
 plt.figure()

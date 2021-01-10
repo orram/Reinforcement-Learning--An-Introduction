@@ -9,9 +9,13 @@ page - 130
 Using SARSA TD(0)
 
 """
+
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
+os.chdir(os.path.dirname(__file__))
+from Tabular_Learners import td_0
 
 def windy_gridworld(location, action):
     '''
@@ -62,16 +66,19 @@ def windy_gridworld(location, action):
 #Begin with the regular problem, only up, down, right, left
 #The grid of size 9X6
 
-grid_size_x = 10
-grid_size_y = 7
-num_actions = 8
-Q = np.zeros([ num_actions, grid_size_x, grid_size_y])
+grid_size_x = 9+1
+grid_size_y = 6+1
+num_actions = 9
 
 starting_corr = np.array([0,3])
 epochs = 20_000
 epsilon = 0.1
 alpha = 0.5
 lmbda = 0.5
+learner = td_0(state_space = [grid_size_x,grid_size_y], action_space = num_actions,\
+               alpha = alpha, lmbda = lmbda, epsilon = epsilon)
+action = learner.act(starting_corr)
+location = starting_corr * 1
 count_steps = 0
 #keep track of some of the runs
 memory = []
@@ -82,26 +89,13 @@ action_memory = []
 for epoch in range(epochs):
     
     local_reward_memory = [] 
-    if count_steps == 0:
-        location = starting_corr
-    else: 
-        location = new_location*1
+    old_location = location * 1 
+    
     local_memory.append(location*1)
     #extract the action values for the particular location
-    action_space = Q[:,location[0],location[1]]
-    #epsilon greedy:
-    if np.random.rand() > 1 - epsilon:
-        action = np.random.randint(0,len(action_space))
-    else:
-        #Choose maximal valued action - another option will be to define pi(S,A) 
-        #that defines a probability for an action given a state.  
-        action = np.where(action_space == max(action_space))[0]
-        #if more then one max action, pick at random
-        if len(action) > 1:
-            action = action[np.random.randint(0,len(action))]
-    action = int(action )
-    action_memory.append([location,action, np.where(action_space == max(action_space))[0]])
-    new_location, reward = windy_gridworld(location, action)
+    max_action = learner.act(location, epsilon_greedy = False)
+    action_memory.append([location,action, max_action])
+    location, reward = windy_gridworld(location, action)
     #Keeps track on the number of finished runs in an epoch as there is no
     #end goal.
     if reward == -1:
@@ -109,16 +103,7 @@ for epoch in range(epochs):
     else:
         episodes_memory.append(episodes_memory[-1]+1)
     #extract the value of the new state in order to update the old Q(S,A)
-    new_action_space = Q[:,new_location[0],new_location[1]]
-    new_action = np.where(new_action_space == max(new_action_space))[0]
-    #if more then one max action, pick at random
-    if len(new_action) > 1:
-        new_action = new_action[np.random.randint(0,len(new_action))]
-    #LEARNING - update state action value
-    Q[action, location[0], location[1]] \
-        += alpha*(reward + \
-           lmbda*Q[new_action,new_location[0],new_location[1]] -\
-            Q[action,location[0],location[1]])
+    action = learner.learn(old_location, action, location, reward)
     count_steps += 1
     if epoch%500 == 0:
         print(epoch, episodes_memory[-1])

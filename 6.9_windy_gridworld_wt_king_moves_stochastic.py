@@ -96,7 +96,7 @@ for epoch in range(epochs):
     else: 
         location = new_location*1
     local_memory.append(location*1)
-    action_space = Q[:,location[0],location[1]]
+    action_space = Q[:, location[0], location[1]]
     #epsilon greedy:
     if np.random.rand() > 1 - epsilon:
         action = np.random.randint(0,len(action_space))
