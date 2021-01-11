@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import os
 
 os.chdir(os.path.dirname(__file__))
-from Tabular_Learners import td_0
+from Tabular_Learners import td_0,td_n
 
 def windy_gridworld(location, action):
     '''
@@ -71,12 +71,12 @@ grid_size_y = 6+1
 num_actions = 9
 
 starting_corr = np.array([0,3])
-epochs = 20_000
+epochs = 15_000
 epsilon = 0.1
 alpha = 0.5
 lmbda = 0.5
-learner = td_0(state_space = [grid_size_x,grid_size_y], action_space = num_actions,\
-               alpha = alpha, lmbda = lmbda, epsilon = epsilon)
+learner = td_n(state_space = [grid_size_x,grid_size_y], action_space = num_actions,\
+                n=0,alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False)
 action = learner.act(starting_corr)
 location = starting_corr * 1
 count_steps = 0
@@ -102,11 +102,14 @@ for epoch in range(epochs):
         episodes_memory.append(episodes_memory[-1]+0)
     else:
         episodes_memory.append(episodes_memory[-1]+1)
+        learner.post_terminal_learn()
+        
     #extract the value of the new state in order to update the old Q(S,A)
     action = learner.learn(old_location, action, location, reward)
     count_steps += 1
     if epoch%500 == 0:
         print(epoch, episodes_memory[-1])
+
 plt.figure()       
 plt.plot(episodes_memory)
 plt.title('Accumulated Times Reached Goal\n Windy Gridworld wt King Moves')
@@ -120,12 +123,7 @@ finish = False
 steps = 0
 while not finish:
     location = new_location*1
-    action_space = Q[:,location[0],location[1]]
-    action = np.where(action_space == max(action_space))[0]
-    #if more then one max action, pick at random
-    if len(action) > 1:
-        action = action[np.random.randint(0,len(action))]
-    action = int(action)
+    action = learner.act(location, off_policy = False)
     best_path.append([location,action])
     new_location, reward = windy_gridworld(location, action)
     if reward == 0:
@@ -138,7 +136,7 @@ grid = np.zeros([grid_size_y,grid_size_x])
 best_path = np.array(best_path)
 count = 1
 for i,j in best_path[:,0]:
-    grid[grid_size_y-j,i] = count 
+    grid[grid_size_y-j-1,i] = count 
     count += 1
 grid[3,7] = count + 1
 plt.figure()
