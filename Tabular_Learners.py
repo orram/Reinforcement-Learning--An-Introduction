@@ -207,7 +207,8 @@ class td_n():
     until tau = T - 1
     
     '''
-    def __init__(self,state_space, action_space,n = 5, alpha = 0.5, lmbda = 0.5, epsilon = 0.1, off_policy = False):
+    def __init__(self,state_space, action_space,n = 5, alpha = 0.5, lmbda = 0.5, \
+                 epsilon = 0.1, off_policy = False, MC = False, normal_dist = False):
         '''
         
 
@@ -242,14 +243,21 @@ class td_n():
         
         #Q will be a 2d matrix with all the possible actions for all possible 
         #states.
-        self.Q = np.zeros(shape = [size,action_space])
+        if normal_dist:
+            self.Q = np.random.normal(loc = 1000, scale = 4, size = [size,action_space])
+        else:
+            self.Q = np.zeros(shape = [size,action_space])
+        
         self.off_policy = off_policy
         if self.off_policy:
             if off_policy == 'random':
                 self.b = np.random.rand(size,action_space)
+                if normal_dist:
+                    self.b = abs(np.random.normal(loc = -5, scale = 4, size = [size,action_space]))
             else:
                 self.b = off_policy 
             self.off_policy = True
+        self.MC = MC
         #Build a list holding all possible combinations of states - 
         #ex - [location x = 0, y=19 and speed = 4]
         state_list = []
@@ -267,6 +275,7 @@ class td_n():
         self.td_reward = []
         self.tau = 0
         self.n = n+1
+        self.save_n = n+1
         #Create a discounting lambda vector to save some time on looping
         
         self.discaunting_vec = self.lmbda**np.arange(0,n+1)
@@ -350,68 +359,88 @@ class td_n():
         None.
 
         '''
-        if self.tau < self.n - 1:
+        if self.MC:
+            if not self.terminal:
+                self.td_state.append(old_state)
+                self.td_action.append(old_action)
+                self.td_reward.append(reward)
+                self.tau += 1
+                new_action = self.act(new_state, off_policy = False) 
+                return new_action
+                
+                
+        elif self.tau < self.n - 1:
             self.td_state.append(old_state)
             self.td_action.append(old_action)
             self.td_reward.append(reward)
             self.tau += 1
             new_action = self.act(new_state, off_policy = False) 
-        else:
-            self.td_state.append(old_state)
-            self.td_action.append(old_action)
-            self.td_reward.append(reward)
-            
-            G = np.sum(np.array(self.td_reward)*self.discaunting_vec)
-            
-            action_to_update = self.td_action[0]
-            state_to_update_index = self.state_comb_list.index(tuple(self.td_state[0]))
-            new_state_index = self.state_comb_list.index(tuple(new_state))
-            #Pick a new action according to new_state
-            #For updating the G function we need action from the Q not the off policy
-            new_action = self.act(new_state, off_policy = False) 
-            if not self.terminal:
-                G += (self.lmbda**self.n)*self.Q[new_state_index,new_action]
-                #print(G,(self.lmbda**self.n),self.Q[new_state_index,new_action])
-            #LEARNING - update state action value
-            self.Q[state_to_update_index,action_to_update] \
-                += self.alpha*(G -\
-                    self.Q[state_to_update_index,action_to_update])
-            
-            check = reward + \
-                               self.lmbda*self.Q[new_state_index,new_action] -\
-                                   self.Q[state_to_update_index,action_to_update]
-                                   
-            #print(G -\
-            #        self.Q[state_to_update_index,action_to_update], check)
-            #self.Q[state_to_update_index,action_to_update] \
-            #    += self.alpha*(reward + \
-            #                   self.lmbda*self.Q[new_state_index,new_action] -
-            #                       self.Q[state_to_update_index,action_to_update])
-            #remove the just updated spot
-            self.state_temp = self.td_state[0]
-            self.action_temp = self.td_action[0]
-            self.state_reward = self.td_reward[0]
-            self.td_state.remove(self.td_state[0])
-            self.td_action.remove(self.td_action[0])
-            self.td_reward.remove(self.td_reward[0])
+            return new_action
+        self.td_state.append(old_state )
+        self.td_action.append(old_action )
+        self.td_reward.append(reward )
         
+        G = np.sum(np.array(self.td_reward)*self.discaunting_vec)
+        
+        action_to_update = self.td_action[0]
+        state_to_update_index = self.state_comb_list.index(tuple(self.td_state[0]))
+        new_state_index = self.state_comb_list.index(tuple(new_state))
+        #Pick a new action according to new_state
+        #For updating the G function we need action from the Q not the off policy
+        new_action = self.act(new_state, off_policy = False) 
+        if not self.terminal:
+            G += (self.lmbda**self.n)*self.Q[new_state_index,new_action]
+            #print(G,(self.lmbda**self.n),self.Q[new_state_index,new_action])
+        #LEARNING - update state action value
+        self.Q[state_to_update_index,action_to_update] \
+            += self.alpha*(G -\
+                self.Q[state_to_update_index,action_to_update])
+        
+        check = reward + \
+                           self.lmbda*self.Q[new_state_index,new_action] -\
+                               self.Q[state_to_update_index,action_to_update]
+                               
+        #print(G -\
+        #        self.Q[state_to_update_index,action_to_update], check)
+        #self.Q[state_to_update_index,action_to_update] \
+        #    += self.alpha*(reward + \
+        #                   self.lmbda*self.Q[new_state_index,new_action] -
+        #                       self.Q[state_to_update_index,action_to_update])
+        #remove the just updated spot
+        self.state_temp = self.td_state[0]
+        self.action_temp = self.td_action[0]
+        self.state_reward = self.td_reward[0]
+        self.td_state.remove(self.td_state[0])
+        self.td_action.remove(self.td_action[0])
+        self.td_reward.remove(self.td_reward[0])
+    
         #if self.off_policy:
         #    new_action = self.act(new_state, off_policy = self.off_policy)
         return new_action
     
     def post_terminal_learn(self):
+        if self.MC:
+            self.n = self.tau
+            self.discaunting_vec = self.lmbda**np.arange(0,self.n)
+            self.state_temp = self.td_state[0]
+            self.action_temp = self.td_action[0]
+            self.state_reward = self.td_reward[0]
         if self.n == 1:
             return
         self.terminal = True
+        if self.tau < self.n - 1:
+            self.n = self.tau 
+            self.discaunting_vec = self.lmbda**np.arange(0,self.n)
         for i in range(self.n-1):
             #print(self.state_temp, self.td_reward)
             _ = self.learn(old_state = self.state_temp, old_action = None, \
                        new_state = self.state_temp, reward = 0)
         self.terminal = False
-        self.tau = 0
         self.td_state = []
         self.td_action = []
         self.td_reward = []
         self.tau = 0
+        self.n = self.save_n*1
+        self.discaunting_vec = self.lmbda**np.arange(0,self.n)
             
         

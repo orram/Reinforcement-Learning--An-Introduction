@@ -243,7 +243,9 @@ until tau = T - 1
 '''
 #%%
 #Initialize the race track map
-track = Race_track([60,40])
+y_size = 10
+x_size = 4
+track = Race_track([y_size,x_size])
 #%%
 #Inirtialize parameters:
 all_locations = np.argwhere(track>0)*1
@@ -255,8 +257,7 @@ all_speeds = []
 for i in np.arange(-4,5):
     for j in np.arange(-4,5):
         all_speeds.append([i,j])
-        
-        
+
 
 Q = {}
 C = {}
@@ -267,7 +268,7 @@ for location in all_locations:
     for speed in all_speeds:
         action_dict = {}
         c_dict = {}
-        q = np.random.normal(loc = -10, scale = 4, size = 9)
+        q = np.random.normal(loc = 100, scale = 4, size = 9)
         #p = p/p.sum()
         j = 0
         for action in all_actions:
@@ -300,6 +301,7 @@ for location in all_locations:
 
 track_visits = np.zeros(np.shape(track))
 
+
 pi = {}
 for location in all_locations:
     for speed in all_speeds:
@@ -309,10 +311,11 @@ for location in all_locations:
 #%%
 policy_reward = []
 changed_act_at_loc = []
-on_policy = False
-epochs = 2_001
-lam = 0.5
-epsilon = 0.8 
+on_policy = True
+epochs = 1_001
+lam = 0.9
+alpha = 0.1
+epsilon = 0.5
 mark_w = 1.25
 all_tests = []
 
@@ -335,6 +338,16 @@ for epoch in range(epochs):
             print(run_time)
             didnt_reach_finish = True
             break
+
+        old_coordinates = new_coordinates*1
+        old_speed = new_speed * 1
+        new_coordinates, new_speed, reward, finish = Race(track = track,
+                                                      coordinates = new_coordinates,
+                                                      speed = new_speed, 
+                                                      action = action)
+        track_visits[new_coordinates[0],new_coordinates[1]] += 1
+        race_memory.append([old_coordinates,old_speed, action, reward])
+        old_action = action*1
         if on_policy:
             if np.random.choice([0,1], p = [epsilon, 1-epsilon]):
                 action = all_actions[np.random.choice(np.arange(0,9))]
@@ -345,46 +358,23 @@ for epoch in range(epochs):
             p = list(b[str(new_coordinates)][str(new_speed)].values())
             action_index = np.random.choice(np.arange(0,9),p = p)
             action = all_actions[action_index]
-        old_coordinates = new_coordinates*1
-        old_speed = new_speed * 1
-        new_coordinates, new_speed, reward, finish = Race(track = track,
-                                                      coordinates = new_coordinates,
-                                                      speed = new_speed, 
-                                                      action = action)
-        track_visits[new_coordinates[0],new_coordinates[1]] += 1
-        race_memory.append([old_coordinates,old_speed, action, reward])
-        
-    race_memory = np.array(race_memory, dtype=object)
-    G = 0 
-    W = 1
-    for i in range(len(race_memory)):
-        
-        coor, speed, action, reward = race_memory[-1-i]
-        if on_policy:
-            if action == pi[str(coor*1) + "," + str(speed*1)]*1:
-                on_policy_chance = epsilon*1
-            else:
-                on_policy_chance = (1-epsilon)*0.1
-        G = lam * G + reward
-        C[str(coor)][str(speed)][str(action)] += W
-        Q[str(coor)][str(speed)][str(action)] += (W/C[str(coor)][str(speed)][str(action)]) * (G - Q[str(coor)][str(speed)][str(action)])
-        old_pi_act = pi[str(coor*1) + "," + str(speed*1)]*1
-        max_act = np.argmax(list(Q[str(coor)][str(speed)].values()))
-        pi[str(coor*1) + "," + str(speed*1)] = all_actions[max_act]
-        if not old_pi_act == pi[str(coor*1) + "," + str(speed*1)]:
+        ###########################################
+        #LEARNING - update state action value TD(0)
+        ###########################################
+        Q[str(old_coordinates)][str(old_speed)][str(old_action)] \
+            += alpha*(reward + \
+               lam*Q[str(new_coordinates)][str(new_speed)][str(action)] -\
+                Q[str(old_coordinates)][str(old_speed)][str(old_action)])
+        old_pi_act = pi[str(old_coordinates*1) + "," + str(old_speed*1)]*1
+        max_act = np.argmax(list(Q[str(old_coordinates)][str(old_speed)].values()))
+        pi[str(old_coordinates*1) + "," + str(old_speed*1)] = all_actions[max_act]
+        if not old_pi_act == pi[str(old_coordinates*1) + "," + str(old_speed*1)]:
             #print('changed action on location - ', coor)
-            changed_act_at_loc.append(coor*1)
-        if not pi[str(coor*1) + "," + str(speed*1)] == action:
-            break
-        if on_policy:
-            W = W * (1/on_policy_chance)
-            if W == mark_w:
-                print(W)
-                mark_w = mark_w * (1/on_policy_chance)
-        else:
-            W = W * (1/b[str(coor)][str(speed)][str(action)])
+            changed_act_at_loc.append(old_coordinates*1)
+       
+    race_memory = np.array(race_memory, dtype=object)
             
-    if epoch%10== 0: 
+    if epoch%25== 0: 
         if epoch == 0:
             pass
         start_location = np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)[np.random.randint(0,len(np.argwhere(all_locations[:,0] == np.shape(track)[0]-1)))]
@@ -488,7 +478,7 @@ matrice = ax.matshow(M)
 plt.colorbar(matrice)
 
 ani = animation.FuncAnimation(fig, update, frames=len(changed_act_at_loc), interval=0.5, repeat =False)
-ani.save('changed_action_at_location on policy = {0}.gif'.format(on_policy), writer=writergif)
+ani.save('TD(0) changed_action_at_location on policy = {0}.gif'.format(on_policy), writer=writergif)
 plt.show()
 #%%
 writergif = animation.PillowWriter(fps=5)
@@ -513,7 +503,7 @@ matrice = ax.matshow(M)
 plt.colorbar(matrice)
 
 ani = animation.FuncAnimation(fig, update, frames=len(anim_memory), interval=200, repeat =False)
-ani.save('all_test_tracks on policy = {0}.gif'.format(on_policy), writer=writergif)
+ani.save('TD(0) all_test_tracks on policy = {0}.gif'.format(on_policy), writer=writergif)
 plt.show()
 #%%
 

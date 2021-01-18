@@ -76,7 +76,10 @@ epsilon = 0.1
 alpha = 0.5
 lmbda = 0.5
 learner = td_n(state_space = [grid_size_x,grid_size_y], action_space = num_actions,\
-                n=0,alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False)
+                n=2,alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False)
+    
+#learner = td_0(state_space = [grid_size_x,grid_size_y], action_space = num_actions,\
+#               alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False)
 action = learner.act(starting_corr)
 location = starting_corr * 1
 count_steps = 0
