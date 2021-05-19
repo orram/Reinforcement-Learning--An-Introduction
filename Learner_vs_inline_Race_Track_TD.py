@@ -16,6 +16,10 @@ Only here we use TD(n) algorithm to compare with MC that we did before
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+import os
+
+os.chdir(os.path.dirname(__file__))
+from Tabular_Learners import td_n
 
 def Race_track(size):
     '''
@@ -243,7 +247,7 @@ until tau = T - 1
 '''
 #%%
 #Initialize the race track map
-y_size = 40
+y_size = 20
 x_size = 15
 track = Race_track([y_size,x_size])
 #%%
@@ -283,16 +287,24 @@ for location in all_locations:
 track_visits = np.zeros(np.shape(track))
     
 #%%
+num_speeds = len(all_speeds)
+num_actions = len(all_actions)
+
 policy_reward = []
 changed_act_at_loc = []
 on_policy = True
-epochs = 1_001
+epochs = 11
 lam = 0.9
 alpha = 0.1
 epsilon = 0.5
 mark_w = 1.25
 all_tests = []
-
+learner = td_n(state_space = [y_size,x_size, num_speeds], action_space = num_actions,\
+                n=0,alpha = alpha, lmbda = lam, epsilon = epsilon, off_policy = False,\
+                    MC = False, normal_dist = True)
+learner.Q = Q
+compare_class = []
+compare_h = []
 for epoch in range(epochs):
     if epoch%1000 == 0:
         print('Starting epoch -',epoch)
@@ -328,6 +340,7 @@ for epoch in range(epochs):
         new_state = [new_coordinates[0],new_coordinates[1],learner_new_speed]
         new_state_index = state_comb_list.index(tuple(new_state))
         old_learner_action = learner_action * 1
+        
         race_memory.append([old_coordinates,old_speed, action, reward])
         old_action = action*1
         
@@ -335,18 +348,30 @@ for epoch in range(epochs):
             if np.random.choice([0,1], p = [epsilon, 1-epsilon]):
                 action = all_actions[np.random.choice(np.arange(0,9))]
             else:
+                #print('from pi')
                 action = pi[str(new_coordinates*1) + "," + str(learner_new_speed*1)]
                 
         else:
             p = list(b[new_state_index])
             action_index = np.random.choice(np.arange(0,9),p = p)
             action = all_actions[action_index]
+        max_act_h = pi[str(new_coordinates*1) + "," + str(learner_new_speed*1)]
+        max_act_h = all_actions.index(max_act_h)
         learner_action = all_actions.index(action)
         ###########################################
         #LEARNING - update state action value TD(0)
         ###########################################
         update_state_index = state_comb_list.index(tuple(old_state))
         new_state_index = state_comb_list.index(tuple(new_state))
+        ########## Comperting #####################
+        G_here = reward + \
+               lam*Q[new_state_index,learner_action]
+        #print('here Q', Q[new_state_index,learner_action], new_state_index, learner_action)
+        compare_h.append((G_here, learner_action, max_act_h, Q[new_state_index,learner_action], reward, lam))
+        learner_action_class, G_class, max_action, Q_class, r_class, factor_class = learner.learn(old_state, old_learner_action, new_state, reward, a = learner_action)
+        #print('here reward', reward)
+        compare_class.append((G_class, learner_action_class, max_action[0],Q_class, r_class, factor_class))
+        ###########################################
         Q[update_state_index,old_learner_action] \
             += alpha*(reward + \
                lam*Q[new_state_index,learner_action]  -\
@@ -384,6 +409,8 @@ for epoch in range(epochs):
                 break
             learner_new_speed = all_speeds.index(list(new_speed))
             action = pi[str(new_coordinates) + "," + str(learner_new_speed)]
+            act, m_act = learner.act(state, epsilon_greedy = False)
+            act = all_actions[learner_action]
             old_coordinates = new_coordinates*1
             old_speed = new_speed * 1
             new_coordinates, new_speed, reward, finish = Race(track = track,

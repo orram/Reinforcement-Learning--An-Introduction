@@ -207,8 +207,8 @@ def Race(track, coordinates, speed, action):
 
 #%%
 #Initialize the race track map
-y_size = 10
-x_size = 4 
+y_size = 20
+x_size = 10 
 track = Race_track([y_size,x_size])
 all_locations = np.argwhere(track>0)*1
 
@@ -234,17 +234,17 @@ for i in [-1,0,1]:
         
 num_actions = len(all_actions)
 
-epsilon = 0.8
-alpha = 0.5
-lmbda = 0.5
+epsilon = 0.5
+alpha = 0.1
+lmbda = 0.9
 learner = td_n(state_space = [y_size,x_size, num_speeds], action_space = num_actions,\
-                n=0,alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False,\
+                n=10,alpha = alpha, lmbda = lmbda, epsilon = epsilon, off_policy = False,\
                     MC = False, normal_dist = True)
 
 policy_reward = []
 changed_act_at_loc = []
 on_policy = False
-epochs = 1000
+epochs = 1_000
 all_tests = []
 
 for epoch in range(epochs):
@@ -313,7 +313,8 @@ for epoch in range(epochs):
                 print('Evaluation exceeded time elocated', run_time)
                 break
             state = [new_coordinates[0],new_coordinates[1],learner_speed]
-            action = learner.act(state, epsilon_greedy = False)
+            action, _ = learner.act(state, epsilon_greedy = False)
+            action = all_actions[action]
             old_coordinates = new_coordinates*1
             old_speed = new_speed * 1
             new_coordinates, new_speed, reward, finish = Race(track = track,
@@ -321,6 +322,7 @@ for epoch in range(epochs):
                                                           speed = new_speed, 
                                                           action = action)
             
+            learner_speed = all_speeds.index(list(new_speed))
             test_memory.append([old_coordinates,old_speed, action, reward])
         
         test_memory = np.array(test_memory, dtype=object)

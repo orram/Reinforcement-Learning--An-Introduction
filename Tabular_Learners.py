@@ -313,25 +313,27 @@ class td_n():
             action_values = self.Q[state_index,:]
             #epsilon greedy choose an action
             if epsilon_greedy:
-                if np.random.choice([0,1], p=[1-self.epsilon, self.epsilon]):
+                if np.random.choice([0,1], p=[self.epsilon, 1-self.epsilon]):
                     
                     action = np.random.choice(np.arange(0,len(action_values)))
                     
                     #Option to choose statisticaly and not gready
                 else:
+                    #print('fron Q')
                     action = np.where(action_values == max(action_values))[0]
                     if len(action) > 0: #If there are two max actions, pick at random
                         action = np.random.choice(action)
             
             else:
+                
                 action = np.where(action_values == max(action_values))[0]
                 if len(action) > 0: #If there are two max actions, pick at random
                     action = np.random.choice(action)
         action = int(action )
         #print(action, np.where(action_values == max(action_values))[0])
-        return action
+        return action, np.where(action_values == max(action_values))[0]
     
-    def learn(self,old_state,old_action,new_state, reward):
+    def learn(self,old_state,old_action,new_state, reward, a = None):
         '''
         The learner is done at time t+n, i.e. a state is inserted into an 'n'
         step memory and following the n step it is updated like a mini monte-carlo
@@ -365,47 +367,47 @@ class td_n():
                 self.td_action.append(old_action)
                 self.td_reward.append(reward)
                 self.tau += 1
-                new_action = self.act(new_state, off_policy = False) 
+                new_action, _ = self.act(new_state, off_policy = False)                 
                 return new_action
                 
                 
         elif self.tau < self.n - 1:
+            #Before reaching enough data points for TD(n), we store the 
+            #points without updating Q
             self.td_state.append(old_state)
             self.td_action.append(old_action)
             self.td_reward.append(reward)
             self.tau += 1
-            new_action = self.act(new_state, off_policy = False) 
+            new_action,_ = self.act(new_state, off_policy = False) 
+            
             return new_action
         self.td_state.append(old_state )
         self.td_action.append(old_action )
         self.td_reward.append(reward )
         
         G = np.sum(np.array(self.td_reward)*self.discaunting_vec)
-        
+        r = np.sum(np.array(self.td_reward)*self.discaunting_vec) * 1
         action_to_update = self.td_action[0]
         state_to_update_index = self.state_comb_list.index(tuple(self.td_state[0]))
         new_state_index = self.state_comb_list.index(tuple(new_state))
         #Pick a new action according to new_state
         #For updating the G function we need action from the Q not the off policy
-        new_action = self.act(new_state, off_policy = False) 
+        new_action, max_act = self.act(new_state, off_policy = False) 
         if not self.terminal:
             G += (self.lmbda**self.n)*self.Q[new_state_index,new_action]
+            #print('class Q', self.Q[new_state_index,new_action], new_state_index, new_action)
             #print(G,(self.lmbda**self.n),self.Q[new_state_index,new_action])
         #LEARNING - update state action value
         self.Q[state_to_update_index,action_to_update] \
             += self.alpha*(G -\
                 self.Q[state_to_update_index,action_to_update])
-        
-        check = reward + \
-                           self.lmbda*self.Q[new_state_index,new_action] -\
-                               self.Q[state_to_update_index,action_to_update]
+                
+        #The update rule for TD(0) as a reference to compare for debug
+        #check = reward + \
+        #                   self.lmbda*self.Q[new_state_index,new_action] -\
+        #                       self.Q[state_to_update_index,action_to_update]
                                
-        #print(G -\
-        #        self.Q[state_to_update_index,action_to_update], check)
-        #self.Q[state_to_update_index,action_to_update] \
-        #    += self.alpha*(reward + \
-        #                   self.lmbda*self.Q[new_state_index,new_action] -
-        #                       self.Q[state_to_update_index,action_to_update])
+
         #remove the just updated spot
         self.state_temp = self.td_state[0]
         self.action_temp = self.td_action[0]
@@ -413,10 +415,10 @@ class td_n():
         self.td_state.remove(self.td_state[0])
         self.td_action.remove(self.td_action[0])
         self.td_reward.remove(self.td_reward[0])
-    
+        
         #if self.off_policy:
         #    new_action = self.act(new_state, off_policy = self.off_policy)
-        return new_action
+        return new_action #G, max_act, self.Q[new_state_index,new_action], r, self.lmbda**self.n
     
     def post_terminal_learn(self):
         if self.MC:
