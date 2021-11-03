@@ -60,7 +60,7 @@ def reward_to_go(episode_rewards):
     return rtg
 
 #call enviorment - CartPole-v0, MountainCar-v0
-env = gym.make('MountainCar-v0')
+env = gym.make('CartPole-v0')
 hidden = [32,64]
 #Initialize policy network
 policy_net = mlp(sizes = [env.observation_space.shape[0]] + hidden + [env.action_space.n])
@@ -73,17 +73,27 @@ value_loss = nn.MSELoss()
 #Define one epoch of training
 def train_one_epoch(training_batch = 100, rtg_mode = True, vfb = True, value_function = None):
     #make list placeholders
+    #List of all observasions, all states of the network - will be used to update 
+    #the policy network (get's the networks action probability) and and value
+    # function
     obs_list = []
+    #List all actions performed - will be used to update 
+    #the policy network (get's the networks action probability) 
     act_list = []
+    #List of the weight of each time step, it is computed as the accumalated reward
+    #calculated at the end of the episode, with or without discounting and vfb.
     reward_weights = []
     reward_list = []
     length_list = []
-
+    
+    #Store all rewards of a single run, when the run is finished we'll take the sum 
+    #of episode_R as the total accumalated reward and it's length as the length of 
+    #the run. 
     episod_R = []
+    #Store the predicted value from the value function if vfb=True
     episode_v = []
     
     v_loss = None
-    all_rewards = []
     #First we reset the env to the initial state:
     obs = env.reset()
     full = False
@@ -93,7 +103,7 @@ def train_one_epoch(training_batch = 100, rtg_mode = True, vfb = True, value_fun
         action = select_action(torch.as_tensor(obs, dtype=torch.float32))
         obs, reward, done, _ = env.step(action)
         episod_R.append(reward)
-        all_rewards.append(reward)
+
         act_list.append(action)
         
         if vfb:
@@ -119,7 +129,7 @@ def train_one_epoch(training_batch = 100, rtg_mode = True, vfb = True, value_fun
             
             
             
-    #Take a step
+    #Take a step  
     optimizer.zero_grad()
     loss = compute_loss(torch.as_tensor(obs_list, dtype=torch.float32), 
                         torch.as_tensor(act_list, dtype=torch.int32), 
@@ -133,16 +143,16 @@ def train_one_epoch(training_batch = 100, rtg_mode = True, vfb = True, value_fun
         value_optimizer.zero_grad()
         values = value_function(torch.as_tensor(obs_list, dtype=torch.float32))
         v_loss = value_loss(values.squeeze(),
-                            torch.as_tensor(all_rewards, dtype=torch.float32))
+                            torch.as_tensor(reward_weights, dtype=torch.float32))
         v_loss.backward()
         value_optimizer.step()
         
     return reward_list, length_list, loss, v_loss
 
 #%% Try code
-epochs = 100
+epochs = 1
 plt.figure()
-vfb = True
+vfb = False
 for mode in [True]:
     policy_net = mlp(sizes = [env.observation_space.shape[0]] + hidden + [env.action_space.n])
     optimizer = optim.Adam(policy_net.parameters(), lr = 3e-3)
@@ -161,6 +171,8 @@ for mode in [True]:
     plt.plot(rewards, label = 'rtf={}, vfg={}'.format(mode,vfb))
     
 plt.legend()
+plt.figure()
+plt.plot(value_loss_list, label = 'rtf={}, vfg={}'.format(mode,vfb))
 #%% Compare different options
 epochs = 500
 plt.figure()
@@ -193,8 +205,11 @@ plt.legend()
 
 #TODO
 # Add value function baselines and the advantage formulation of policy gradients
-# Make sure the learning is stable
+# Make sure the learning is stable - run for 30 different trainings for each
+#                                    option and plot avarage plus 95% confidance
+   
 # Look at other gym enviorments
+# Look at other networks (pixle only conv nets)
 #%%
 ##########################
     
